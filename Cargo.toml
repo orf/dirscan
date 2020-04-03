@@ -9,3 +9,5 @@ edition = "2018"
 [dependencies]
 ignore = "0.4.11"
 structopt = "0.3.11"
+num_cpus = "1.12.0"
+exitcode = "1.1.2"
