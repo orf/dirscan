@@ -51,7 +51,7 @@ jobs:
 
       - name: Simple Test
         run: |
-          cargo run -- scan --format=json -o output.json
+          cargo run -- scan $(pwd) --format=json -o output.json
           cargo run -- parse output.json --depth=1
 
       - name: Build release
