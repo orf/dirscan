@@ -231,13 +231,18 @@ fn scan(
                 let total_components = path_components_set.len();
                 let total_directories = path_stat.len();
                 let percentage_components =
-                    (total_components as f64 / total_directories as f64) * 100 as f64;
+                    ((total_components as f64 / total_directories as f64) * 100 as f64) as i32;
+                let percentage_display = if percentage_components < 50 {
+                    green_style.apply_to(percentage_components)
+                } else {
+                    red_style.apply_to(percentage_components)
+                };
                 let msg = format!(
-                    "Directories: {} | Size: {} | Components: {} ({:.0}%) | Errors: IO={} Other={}",
+                    "Directories: {} | Size: {} | Components: {} ({}%) | Errors: IO={} Other={}",
                     green_style.apply_to(total_directories),
                     green_style.apply_to(HumanBytes(total_size)),
                     blue_style.apply_to(total_components),
-                    green_style.apply_to(percentage_components),
+                    percentage_display,
                     red_style.apply_to(io_errors),
                     red_style.apply_to(other_errors),
                 );
