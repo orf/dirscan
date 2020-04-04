@@ -1,27 +1,165 @@
-use ignore::{DirEntry, Error, ParallelVisitor, ParallelVisitorBuilder, WalkBuilder, WalkState};
+use crate::directory_stat::DirectoryStat;
+use console::Style;
+use crossbeam_channel::unbounded;
+use ignore::{Error, WalkBuilder, WalkState};
 use indexmap::IndexSet;
+use indicatif::{HumanBytes, ProgressBar, ProgressStyle};
+use prettytable::{cell, row, Cell, Row, Table};
+use serde_json::Deserializer;
 use std::collections::HashMap;
-use std::ops::Index;
+use std::ffi::OsString;
+use std::fs::{File, OpenOptions};
+use std::io;
 use std::path::PathBuf;
-use std::sync::mpsc::{channel, Receiver, Sender};
-use std::time::SystemTime;
+use std::time::{Duration, Instant, SystemTime};
 use structopt::StructOpt;
+mod directory_stat;
 
-#[derive(Debug, StructOpt)]
+#[derive(StructOpt)]
 #[structopt(name = "dirscan", about = "Scan directories.")]
-struct Opt {
-    // we don't want to name it "speed", need to look smart
-    #[structopt(short = "t", long = "threads")]
-    threads: Option<usize>,
+struct Args {
+    #[structopt(
+    short = "f",
+    long = "format",
+    default_value = "json",
+    parse(try_from_str = parse_output)
+    )]
+    format: Format,
 
-    #[structopt(parse(from_os_str))]
-    input: PathBuf,
+    #[structopt(subcommand)]
+    cmd: Command,
 }
 
-fn main() {
-    let opt: Opt = Opt::from_args();
+#[derive(StructOpt)]
+enum Command {
+    Scan {
+        #[structopt(short = "t", long = "threads")]
+        threads: Option<usize>,
 
-    let path = opt.input.as_path();
+        #[structopt(short = "i", long = "ignore-hidden", help = "Ignore hidden files")]
+        ignore_hidden: bool,
+
+        #[structopt(short = "o", long = "output", parse(from_os_str))]
+        output: Option<PathBuf>,
+        #[structopt(parse(from_os_str))]
+        input: PathBuf,
+    },
+    Parse {
+        #[structopt(short = "d", long = "depth", default_value = "3")]
+        depth: usize,
+
+        #[structopt()]
+        prefix: String,
+        #[structopt(parse(from_os_str))]
+        input: PathBuf,
+    },
+}
+
+#[derive(Debug)]
+enum Format {
+    JSON,
+    CSV,
+}
+
+fn parse_output(src: &str) -> Result<Format, String> {
+    match src.to_lowercase().as_str() {
+        "json" => Ok(Format::JSON),
+        "csv" => Ok(Format::CSV),
+        _ => Err(format!("Invalid format: {}", src)),
+    }
+}
+
+fn main() -> Result<(), Error> {
+    let args: Args = Args::from_args();
+    match args.cmd {
+        Command::Scan {
+            threads,
+            ignore_hidden,
+            output,
+            input,
+        } => scan(input, output, args.format, ignore_hidden, threads),
+        Command::Parse {
+            depth,
+            prefix,
+            input,
+        } => read(input, args.format, depth, prefix),
+    }
+}
+
+fn read(input: PathBuf, format: Format, depth: usize, prefix: String) -> Result<(), Error> {
+    let file = File::open(input)?;
+    let reader = io::BufReader::new(file);
+
+    let stats: Box<dyn Iterator<Item = DirectoryStat>> = match format {
+        Format::JSON => Box::new(
+            Deserializer::from_reader(reader)
+                .into_iter::<DirectoryStat>()
+                .map(|f| f.unwrap()),
+        ),
+        Format::CSV => Box::new(
+            csv::Reader::from_reader(reader)
+                .into_deserialize::<DirectoryStat>()
+                .into_iter()
+                .map(|f| f.unwrap()),
+        ),
+    };
+
+    let filtered_stats = stats.filter(|r| {
+        let path = r.path.as_ref().unwrap();
+        path.starts_with(&prefix)
+    });
+
+    let mut stats: HashMap<PathBuf, DirectoryStat> = HashMap::new();
+
+    for mut stat in filtered_stats {
+        let unwrapped_path = stat.path.unwrap();
+        // This is a bit of a mess. We set it to None to avoid some borrow checker issues.
+        // This needs some refactoring!
+        stat.path = None;
+
+        let relative_path = unwrapped_path.strip_prefix(&prefix).unwrap();
+        // Only take the 'depth' number of components, thus truncating the path to a the depth
+        let relative_path_with_depth: PathBuf = relative_path.components().take(depth).collect();
+        stats
+            .entry(relative_path_with_depth)
+            .and_modify(|p| p.merge(&stat))
+            .or_insert(stat);
+        // println!("Rel: {:?}", relative_path);
+        // println!("depth: {:?}", relative_path_with_depth);
+    }
+
+    let mut table = Table::new();
+    table.add_row(row![
+        "Prefix", "Files", "Size", "created", "accessed", "modified"
+    ]);
+
+    let now = chrono::Utc::now();
+    let formatter = timeago::Formatter::new();
+
+    for (key, value) in stats {
+        table.add_row(row![
+            key.as_path().display(),
+            value.file_count,
+            HumanBytes(value.total_size),
+            formatter.convert_chrono(value.latest_created, now),
+            formatter.convert_chrono(value.latest_accessed, now),
+            formatter.convert_chrono(value.latest_modified, now)
+        ]);
+    }
+
+    table.printstd();
+    Ok(())
+}
+
+fn scan(
+    input: PathBuf,
+    output: Option<PathBuf>,
+    output_format: Format,
+    ignore_hidden: bool,
+    threads: Option<usize>,
+) -> Result<(), Error> {
+    let path = input.as_path();
+    let threads = threads.unwrap_or_else(num_cpus::get);
 
     if !path.is_dir() {
         eprintln!(
@@ -33,7 +171,7 @@ fn main() {
 
     let mut walker = WalkBuilder::new(path);
     walker
-        .hidden(false)
+        .hidden(ignore_hidden)
         .parents(false)
         .ignore(false)
         .git_ignore(false)
@@ -41,18 +179,45 @@ fn main() {
         .git_exclude(false)
         .follow_links(false);
 
-    let threads = opt.threads.unwrap_or_else(num_cpus::get);
+    let (tx, rx) = unbounded();
 
-    let (tx, rx) = channel();
-
-    let handler = std::thread::spawn(|| {
+    let handler = std::thread::spawn(move || {
         let mut io_errors: u64 = 0;
         let mut other_errors: u64 = 0;
+        let mut total_files: u64 = 0;
 
-        let mut path_components_set: IndexSet<String> = IndexSet::with_capacity(100);
+        let mut path_components_set: IndexSet<OsString> = IndexSet::with_capacity(100);
         let mut path_stat: HashMap<Vec<usize>, DirectoryStat> = HashMap::with_capacity(100);
 
-        for result in rx {
+        let update_every = Duration::from_secs(1);
+        let mut last_update = Instant::now();
+
+        let red_style = Style::new().red();
+        let blue_style = Style::new().blue();
+        let green_style = Style::new().green();
+
+        let bar = ProgressBar::new_spinner();
+        bar.enable_steady_tick((update_every.as_millis() + 50) as u64);
+        bar.set_draw_delta(10_000);
+        bar.set_style(
+            ProgressStyle::default_spinner()
+                .template("[{elapsed_precise}] Files/s: {per_sec:.cyan/blue} | {msg}"),
+        );
+
+        for result in bar.wrap_iter(rx.iter()) {
+            if last_update.elapsed() > update_every {
+                last_update = Instant::now();
+                let msg = format!(
+                    "Files: {} | Directories: {} | Components: {} | Errors: IO: {} Other: {}",
+                    green_style.apply_to(total_files),
+                    green_style.apply_to(path_stat.len()),
+                    blue_style.apply_to(path_components_set.len()),
+                    red_style.apply_to(io_errors),
+                    red_style.apply_to(other_errors),
+                );
+                bar.set_message(msg.as_str());
+            }
+
             match result {
                 WalkResult::IOError => io_errors += 1,
                 WalkResult::OtherError => other_errors += 1,
@@ -63,9 +228,56 @@ fn main() {
                     size,
                     parent,
                 } => {
-                    path_components_set.insert("lol ".to_string());
-                    println!("{:?}", path_components_set.get_full(&"lol ".to_string()));
+                    total_files += 1;
+                    let path_integers: Vec<usize> = parent
+                        .components()
+                        .map(|c| {
+                            let component = c.as_os_str().to_os_string();
+                            let (idx, _) = path_components_set.insert_full(component);
+                            idx
+                        })
+                        .collect();
+                    path_stat
+                        .entry(path_integers)
+                        .and_modify(|s| {
+                            s.total_size += size;
+                            s.file_count += 1;
+                            s.update_last_access(accessed);
+                            s.update_last_created(created);
+                            s.update_last_modified(modified);
+                        })
+                        .or_insert_with(|| DirectoryStat::new(size, created, accessed, modified));
                 }
+            }
+        }
+
+        let stat_enumerator = path_stat.into_iter().map(|(key, mut dir_stat)| {
+            dir_stat.path = Some(
+                key.into_iter()
+                    .map(|i| path_components_set.get_index(i).unwrap())
+                    .collect(),
+            );
+            dir_stat
+        });
+
+        let mut output_file = get_writer(output);
+        match output_format {
+            Format::JSON => {
+                stat_enumerator.for_each(|s| {
+                    let res = &serde_json::to_vec(&s).expect("Error serializing to JSON");
+                    output_file
+                        .write_all(res)
+                        .expect("Error writing to output file");
+                    writeln!(output_file).expect("error writing newline");
+                });
+            }
+            Format::CSV => {
+                let mut wtr = csv::WriterBuilder::new()
+                    .has_headers(true)
+                    .from_writer(output_file);
+                stat_enumerator.for_each(|s| {
+                    wtr.serialize(s).expect("Error serializing to CSV");
+                })
             }
         }
     });
@@ -80,6 +292,9 @@ fn main() {
                 }
                 Err(_e) => {
                     tx_thread.send(WalkResult::OtherError).unwrap();
+                    return WalkState::Continue;
+                }
+                Ok(dir_entry) if dir_entry.depth() == 0 => {
                     return WalkState::Continue;
                 }
                 Ok(dir_entry) => dir_entry,
@@ -110,7 +325,7 @@ fn main() {
                         })
                         .unwrap();
                 }
-                Err(e) => {
+                Err(_e) => {
                     tx_thread.send(WalkResult::OtherError).unwrap();
                 }
             }
@@ -118,7 +333,8 @@ fn main() {
         })
     });
 
-    handler.join();
+    handler.join().expect("Error in thread");
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -134,51 +350,16 @@ enum WalkResult {
     },
 }
 
-#[derive(Default, Debug)]
-struct DirectoryStat {
-    file_count: u64,
-    total_size: u64,
-
-    latest_created: Option<SystemTime>,
-    latest_accessed: Option<SystemTime>,
-    latest_modified: Option<SystemTime>,
-}
-
-impl DirectoryStat {
-    // Please oh god tell me this can be generalized.
-    pub fn update_last_created(&mut self, created: SystemTime) {
-        match self.latest_created {
-            Some(latest_created) if latest_created < created => {
-                self.latest_created.replace(created);
-            }
-            None => {
-                self.latest_created = Some(created);
-            }
-            _ => {}
-        }
-    }
-
-    pub fn update_last_access(&mut self, accessed: SystemTime) {
-        match self.latest_accessed {
-            Some(latest_accessed) if latest_accessed < accessed => {
-                self.latest_accessed.replace(accessed);
-            }
-            None => {
-                self.latest_accessed = Some(accessed);
-            }
-            _ => {}
-        }
-    }
-
-    pub fn update_last_modified(&mut self, modified: SystemTime) {
-        match self.latest_modified {
-            Some(latest_modified) if latest_modified < modified => {
-                self.latest_modified.replace(modified);
-            }
-            None => {
-                self.latest_modified = Some(modified);
-            }
-            _ => {}
-        }
+fn get_writer(path: Option<PathBuf>) -> Box<dyn io::Write> {
+    match path {
+        None => Box::new(io::stdout()),
+        Some(buf) => Box::new(
+            OpenOptions::new()
+                .write(true)
+                .read(false)
+                .create(true)
+                .open(buf)
+                .expect("Error opening output file"),
+        ),
     }
 }
