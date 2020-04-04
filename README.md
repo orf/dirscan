@@ -1,5 +1,7 @@
 # Dirscan [![Crates.io](https://img.shields.io/crates/v/dirscan.svg)](https://crates.io/crates/dirscan) [![Actions Status](https://github.com/orf/dirscan/workflows/CI/badge.svg)](https://github.com/orf/dirscan/actions)
 
+![](./images/demo.gif)
+
 Dirscan is a high-performance tool for quickly inspecting the contents of large disks. It provides a summary of every 
 single directory on a given disk, complete with the number of files within, their total size, and the latest time a 
 file was created, accessed or modified. 
