@@ -4,6 +4,7 @@ use crossbeam_channel::unbounded;
 use ignore::{Error, WalkBuilder, WalkState};
 use indexmap::IndexSet;
 use indicatif::{HumanBytes, ProgressBar, ProgressStyle};
+use prettytable::format::consts;
 use prettytable::{cell, row, Table};
 use serde_json::Deserializer;
 use std::collections::HashMap;
@@ -49,7 +50,7 @@ enum Command {
         #[structopt(short = "d", long = "depth", default_value = "3")]
         depth: usize,
 
-        #[structopt(short = "p", long = "prefix", default_value = "/")]
+        #[structopt(short = "p", long = "prefix", default_value = "")]
         prefix: String,
         #[structopt(parse(from_os_str))]
         input: PathBuf,
@@ -138,17 +139,27 @@ fn read(input: PathBuf, format: Format, depth: usize, prefix: String) -> Result<
 
         let relative_path = unwrapped_path.strip_prefix(&prefix).unwrap();
         // Only take the 'depth' number of components, thus truncating the path to a the depth
-        let relative_path_with_depth: PathBuf = relative_path.components().take(depth).collect();
-        stats
-            .entry(relative_path_with_depth)
-            .and_modify(|p| p.merge(&stat))
-            .or_insert(stat);
-        // println!("Rel: {:?}", relative_path);
-        // println!("depth: {:?}", relative_path_with_depth);
+        // let relative_path_with_depth: PathBuf = relative_path.components();
+        let base_path = PathBuf::new();
+        let relative_paths_with_depth =
+            relative_path
+                .components()
+                .take(depth)
+                .scan(base_path, |state, component| {
+                    state.push(component);
+                    Some(state.to_path_buf())
+                });
+        for path in relative_paths_with_depth {
+            stats
+                .entry(path)
+                .and_modify(|p| p.merge(&stat))
+                .or_insert(stat.clone());
+        }
     }
 
     let mut table = Table::new();
-    table.add_row(row![
+    table.set_format(*consts::FORMAT_NO_LINESEP_WITH_TITLE);
+    table.set_titles(row![
         "Prefix", "Files", "Size", "created", "accessed", "modified"
     ]);
 
@@ -156,7 +167,7 @@ fn read(input: PathBuf, format: Format, depth: usize, prefix: String) -> Result<
     let formatter = timeago::Formatter::new();
 
     let mut stats_vec: Vec<_> = stats.into_iter().collect();
-    stats_vec.sort_by_key(|f| std::cmp::Reverse(f.1.total_size));
+    stats_vec.sort_by_key(|(buf, _stat)| buf.to_path_buf());
 
     for (key, value) in stats_vec {
         table.add_row(row![
