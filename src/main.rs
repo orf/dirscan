@@ -36,7 +36,7 @@ enum Command {
         #[structopt(short = "o", long = "output", parse(from_os_str))]
         output: Option<PathBuf>,
         #[structopt(parse(from_os_str))]
-        input: PathBuf,
+        path: PathBuf,
 
         #[structopt(
         short = "f",
@@ -86,7 +86,7 @@ fn main() -> Result<(), Error> {
             threads,
             ignore_hidden,
             output,
-            input,
+            path: input,
             format,
         } => scan(input, output, format, ignore_hidden, threads),
         Command::Parse {
