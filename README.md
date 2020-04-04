@@ -5,7 +5,7 @@ single directory on a given disk, complete with the number of files within, thei
 file was created, accessed or modified. 
 
 It is significantly faster than tools like `ncdu`, `find` or `tree`, produces a simple JSON or CSV output that can be analysed by the 
-built-in viewer or loaded into other tools and supports a customizable number of threads.
+built-in viewer or loaded into other tools and supports a customizable number of threads. It also implements a 
  
 
 Table of Contents
@@ -53,8 +53,8 @@ You can also output the results in CSV:
 `dirscan scan [PATH] --output=[OUTPUT] --format=csv`
 
 ```
-$ dirscan scan ~/ --output=output.json
-[00:00:25] Files/s: 10324/s | Total: 258734 | Directories: 34842 | Size: 99.01GB | Components: 14291 | Errors: IO=0 Other=36
+$ dirscan scan ~/ --output=output.json --threads=20
+[00:00:15] Files/s: 17324/s | Total: 258734 | Directories: 34842 | Size: 99.01GB | Components: 14291 | Errors: IO=0 Other=36
 ```
  
 ## Inspect results
