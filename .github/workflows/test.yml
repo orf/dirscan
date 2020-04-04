@@ -51,8 +51,8 @@ jobs:
 
       - name: Simple Test
         run: |
-          cargo run -- scan $(pwd) --format=json -o output.json
-          cargo run -- parse $(pwd) output.json --depth=1
+          cargo run -- scan --format=json -o output.json
+          cargo run -- parse output.json --depth=1
 
       - name: Build release
         if: startsWith(github.ref, 'refs/tags/')
