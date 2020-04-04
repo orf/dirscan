@@ -205,13 +205,12 @@ fn scan(
     let handler = std::thread::spawn(move || {
         let mut io_errors: u64 = 0;
         let mut other_errors: u64 = 0;
-        let mut total_files: u64 = 0;
         let mut total_size: u64 = 0;
 
         let mut path_components_set: IndexSet<OsString> = IndexSet::with_capacity(100);
         let mut path_stat: HashMap<Vec<usize>, DirectoryStat> = HashMap::with_capacity(100);
 
-        let update_every = Duration::from_secs(1);
+        let update_every = Duration::from_millis(250);
         let mut last_update = Instant::now();
 
         let red_style = Style::new().red();
@@ -220,21 +219,25 @@ fn scan(
 
         let pbar = ProgressBar::new_spinner();
         pbar.enable_steady_tick((update_every.as_millis() + 50) as u64);
-        pbar.set_draw_delta(10_000);
+        pbar.set_draw_delta(100_000);
         pbar.set_style(
             ProgressStyle::default_spinner()
-                .template("[{elapsed_precise}] Files/s: {per_sec:.cyan/blue} | {msg}"),
+                .template("[{elapsed_precise}] Files/s: {per_sec:.cyan/blue} | Total: {pos:.green/green} | {msg}"),
         );
 
         for result in pbar.wrap_iter(rx.iter()) {
             if last_update.elapsed() > update_every {
                 last_update = Instant::now();
+                let total_components = path_components_set.len();
+                let total_directories = path_stat.len();
+                let percentage_components =
+                    (total_components as f64 / total_directories as f64) * 100 as f64;
                 let msg = format!(
-                    "Files: {} | Directories: {} | Size: {} | Components: {} | Errors: IO={} Other={}",
-                    green_style.apply_to(total_files),
-                    green_style.apply_to(path_stat.len()),
+                    "Directories: {} | Size: {} | Components: {} ({:.0}%) | Errors: IO={} Other={}",
+                    green_style.apply_to(total_directories),
                     green_style.apply_to(HumanBytes(total_size)),
-                    blue_style.apply_to(path_components_set.len()),
+                    blue_style.apply_to(total_components),
+                    green_style.apply_to(percentage_components),
                     red_style.apply_to(io_errors),
                     red_style.apply_to(other_errors),
                 );
@@ -251,7 +254,6 @@ fn scan(
                     size,
                     parent,
                 } => {
-                    total_files += 1;
                     total_size += size;
                     let path_integers: Vec<usize> = parent
                         .components()
@@ -382,6 +384,7 @@ fn get_writer(path: Option<PathBuf>) -> Box<dyn io::Write> {
                 .write(true)
                 .read(false)
                 .create(true)
+                .create_new(true)
                 .open(buf)
                 .expect("Error opening output file"),
         ),
