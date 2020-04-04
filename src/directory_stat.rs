@@ -1,4 +1,5 @@
 use chrono::prelude::*;
+use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::SystemTime;
@@ -12,6 +13,12 @@ pub struct DirectoryStat {
     pub latest_created: DateTime<Utc>,
     pub latest_accessed: DateTime<Utc>,
     pub latest_modified: DateTime<Utc>,
+}
+
+// Sometimes there are weird dates, like 2098,1,1. Just filter them out here.
+// There is most likely a better way, but for now it works.
+lazy_static! {
+    static ref BLACKLISTED_DATES: [Date<Utc>; 1] = { [Utc.ymd(2098, 1, 1)] };
 }
 
 impl DirectoryStat {
@@ -36,13 +43,19 @@ impl DirectoryStat {
         self.total_size += other.total_size;
         self.file_count += other.file_count;
         // This is nasty, but whatever
-        if self.latest_created < other.latest_created {
+        if self.latest_created < other.latest_created
+            && !BLACKLISTED_DATES.iter().any(|d| other.latest_created.date() == *d)
+        {
             self.latest_created = other.latest_created;
         }
-        if self.latest_accessed < other.latest_accessed {
+        if self.latest_accessed < other.latest_accessed
+            && !BLACKLISTED_DATES.iter().any(|d| other.latest_accessed.date() == *d)
+        {
             self.latest_accessed = other.latest_accessed;
         }
-        if self.latest_modified < other.latest_modified {
+        if self.latest_modified < other.latest_modified
+            && !BLACKLISTED_DATES.iter().any(|d| other.latest_modified.date() == *d)
+        {
             self.latest_modified = other.latest_modified;
         }
     }

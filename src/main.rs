@@ -36,13 +36,13 @@ enum Command {
         #[structopt(parse(from_os_str))]
         input: PathBuf,
 
-            #[structopt(
+        #[structopt(
     short = "f",
     long = "format",
     default_value = "json",
     parse(try_from_str = parse_output)
     )]
-    format: Format,
+        format: Format,
     },
     Parse {
         #[structopt(short = "d", long = "depth", default_value = "3")]
@@ -53,13 +53,13 @@ enum Command {
         #[structopt(parse(from_os_str))]
         input: PathBuf,
 
-            #[structopt(
+        #[structopt(
     short = "f",
     long = "format",
     default_value = "json",
     parse(try_from_str = parse_output)
     )]
-    format: Format,
+        format: Format,
     },
 }
 
@@ -84,12 +84,14 @@ fn main() -> Result<(), Error> {
             threads,
             ignore_hidden,
             output,
-            input, format,
+            input,
+            format,
         } => scan(input, output, format, ignore_hidden, threads),
         Command::Parse {
             depth,
             prefix,
-            input, format,
+            input,
+            format,
         } => read(input, format, depth, prefix),
     }
 }
@@ -112,7 +114,16 @@ fn read(input: PathBuf, format: Format, depth: usize, prefix: String) -> Result<
         ),
     };
 
-    let filtered_stats = stats.filter(|r| {
+    let bar = ProgressBar::new_spinner();
+    bar.enable_steady_tick(Duration::from_secs(1).as_millis() as u64);
+    bar.set_draw_delta(10_000);
+    bar.set_style(
+        ProgressStyle::default_spinner().template(
+            "[{elapsed_precise}] Total: {pos:.cyan/blue} | Per sec: {per_sec:.cyan/blue} ",
+        ),
+    );
+
+    let filtered_stats = bar.wrap_iter(stats).filter(|r| {
         let path = r.path.as_ref().unwrap();
         path.starts_with(&prefix)
     });
@@ -144,9 +155,12 @@ fn read(input: PathBuf, format: Format, depth: usize, prefix: String) -> Result<
     let now = chrono::Utc::now();
     let formatter = timeago::Formatter::new();
 
-    for (key, value) in stats {
+    let mut stats_vec : Vec<_> = stats.into_iter().collect();
+    stats_vec.sort_by_key(|f| std::cmp::Reverse(f.1.total_size));
+
+    for (key, value) in stats_vec {
         table.add_row(row![
-            key.as_path().display(),
+            format!("{}{}", prefix, key.as_path().display()),
             value.file_count,
             HumanBytes(value.total_size),
             formatter.convert_chrono(value.latest_created, now),
@@ -216,7 +230,7 @@ fn scan(
             if last_update.elapsed() > update_every {
                 last_update = Instant::now();
                 let msg = format!(
-                    "Files: {} | Directories: {} | Components: {} | Errors: IO: {} Other: {}",
+                    "Files: {} | Directories: {} | Components: {} | Errors: IO={} Other={}",
                     green_style.apply_to(total_files),
                     green_style.apply_to(path_stat.len()),
                     blue_style.apply_to(path_components_set.len()),
