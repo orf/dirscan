@@ -2,11 +2,11 @@
 
 ![](./images/demo.gif)
 
-Dirscan is a high-performance tool for quickly inspecting the contents of large disks. It provides a summary of every 
-single directory on a given disk, complete with the number of files within, their total size, and the latest time a 
-file was created, accessed or modified. 
+Dirscan is a high-performance tool for quickly inspecting the contents of huge (possibly networked) disks. It provides 
+a summary of every single directory on a given disk, complete with the number of files within, their total size, and the
+latest time a file was created, accessed or modified. 
 
-Dirscan:
+It's designed for disks that are too large to inspect with traditional tools, and it:
 
 * Is significantly faster than tools like `ncdu`, `find` or `tree`
 * Implements a memory-saving dictionary of common path segments to drastically reduce memory usage 
