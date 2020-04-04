@@ -233,7 +233,7 @@ fn scan(
                     "Files: {} | Directories: {} | Size: {} | Components: {} | Errors: IO={} Other={}",
                     green_style.apply_to(total_files),
                     green_style.apply_to(path_stat.len()),
-                    HumanBytes(total_size),
+                    green_style.apply_to(HumanBytes(total_size)),
                     blue_style.apply_to(path_components_set.len()),
                     red_style.apply_to(io_errors),
                     red_style.apply_to(other_errors),
