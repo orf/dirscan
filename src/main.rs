@@ -8,7 +8,7 @@ use prettytable::{cell, row, Table};
 use serde_json::Deserializer;
 use std::collections::HashMap;
 use std::ffi::OsString;
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::io;
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime};
@@ -220,29 +220,20 @@ fn scan(
         let pbar = ProgressBar::new_spinner();
         pbar.enable_steady_tick((update_every.as_millis() + 50) as u64);
         pbar.set_draw_delta(100_000);
-        pbar.set_style(
-            ProgressStyle::default_spinner()
-                .template("[{elapsed_precise}] Files/s: {per_sec:.cyan/blue} | Total: {pos:.green/green} | {msg}"),
-        );
+        pbar.set_style(ProgressStyle::default_spinner().template(
+            "[{elapsed_precise}] Files/s: {per_sec:.cyan/blue} | Total: {pos:.green/green} | {msg}",
+        ));
 
         for result in pbar.wrap_iter(rx.iter()) {
             if last_update.elapsed() > update_every {
                 last_update = Instant::now();
                 let total_components = path_components_set.len();
                 let total_directories = path_stat.len();
-                let percentage_components =
-                    ((total_components as f64 / total_directories as f64) * 100 as f64) as i32;
-                let percentage_display = if percentage_components < 30 {
-                    green_style.apply_to(percentage_components)
-                } else {
-                    red_style.apply_to(percentage_components)
-                };
                 let msg = format!(
-                    "Directories: {} | Size: {} | Components: {} ({}%) | Errors: IO={} Other={}",
+                    "Directories: {} | Size: {} | Components: {} | Errors: IO={} Other={}",
                     green_style.apply_to(total_directories),
                     green_style.apply_to(HumanBytes(total_size)),
                     blue_style.apply_to(total_components),
-                    percentage_display,
                     red_style.apply_to(io_errors),
                     red_style.apply_to(other_errors),
                 );
@@ -384,14 +375,6 @@ enum WalkResult {
 fn get_writer(path: Option<PathBuf>) -> Box<dyn io::Write> {
     match path {
         None => Box::new(io::stdout()),
-        Some(buf) => Box::new(
-            OpenOptions::new()
-                .write(true)
-                .read(false)
-                .create(true)
-                .create_new(true)
-                .open(buf)
-                .expect("Error opening output file"),
-        ),
+        Some(buf) => Box::new(File::create(buf).expect("Error opening the output file")),
     }
 }
