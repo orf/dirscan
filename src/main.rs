@@ -109,21 +109,20 @@ fn read(input: PathBuf, format: Format, depth: usize, prefix: String) -> Result<
         Format::CSV => Box::new(
             csv::Reader::from_reader(reader)
                 .into_deserialize::<DirectoryStat>()
-                .into_iter()
                 .map(|f| f.unwrap()),
         ),
     };
 
-    let bar = ProgressBar::new_spinner();
-    bar.enable_steady_tick(Duration::from_secs(1).as_millis() as u64);
-    bar.set_draw_delta(10_000);
-    bar.set_style(
+    let pbar = ProgressBar::new_spinner();
+    pbar.enable_steady_tick(Duration::from_secs(1).as_millis() as u64);
+    pbar.set_draw_delta(10_000);
+    pbar.set_style(
         ProgressStyle::default_spinner().template(
             "[{elapsed_precise}] Total: {pos:.cyan/blue} | Per sec: {per_sec:.cyan/blue} ",
         ),
     );
 
-    let filtered_stats = bar.wrap_iter(stats).filter(|r| {
+    let filtered_stats = pbar.wrap_iter(stats).filter(|r| {
         let path = r.path.as_ref().unwrap();
         path.starts_with(&prefix)
     });
@@ -155,7 +154,7 @@ fn read(input: PathBuf, format: Format, depth: usize, prefix: String) -> Result<
     let now = chrono::Utc::now();
     let formatter = timeago::Formatter::new();
 
-    let mut stats_vec : Vec<_> = stats.into_iter().collect();
+    let mut stats_vec: Vec<_> = stats.into_iter().collect();
     stats_vec.sort_by_key(|f| std::cmp::Reverse(f.1.total_size));
 
     for (key, value) in stats_vec {
@@ -207,6 +206,7 @@ fn scan(
         let mut io_errors: u64 = 0;
         let mut other_errors: u64 = 0;
         let mut total_files: u64 = 0;
+        let mut total_size: u64 = 0;
 
         let mut path_components_set: IndexSet<OsString> = IndexSet::with_capacity(100);
         let mut path_stat: HashMap<Vec<usize>, DirectoryStat> = HashMap::with_capacity(100);
@@ -218,26 +218,27 @@ fn scan(
         let blue_style = Style::new().blue();
         let green_style = Style::new().green();
 
-        let bar = ProgressBar::new_spinner();
-        bar.enable_steady_tick((update_every.as_millis() + 50) as u64);
-        bar.set_draw_delta(10_000);
-        bar.set_style(
+        let pbar = ProgressBar::new_spinner();
+        pbar.enable_steady_tick((update_every.as_millis() + 50) as u64);
+        pbar.set_draw_delta(10_000);
+        pbar.set_style(
             ProgressStyle::default_spinner()
                 .template("[{elapsed_precise}] Files/s: {per_sec:.cyan/blue} | {msg}"),
         );
 
-        for result in bar.wrap_iter(rx.iter()) {
+        for result in pbar.wrap_iter(rx.iter()) {
             if last_update.elapsed() > update_every {
                 last_update = Instant::now();
                 let msg = format!(
-                    "Files: {} | Directories: {} | Components: {} | Errors: IO={} Other={}",
+                    "Files: {} | Directories: {} | Size: {} | Components: {} | Errors: IO={} Other={}",
                     green_style.apply_to(total_files),
                     green_style.apply_to(path_stat.len()),
+                    HumanBytes(total_size),
                     blue_style.apply_to(path_components_set.len()),
                     red_style.apply_to(io_errors),
                     red_style.apply_to(other_errors),
                 );
-                bar.set_message(msg.as_str());
+                pbar.set_message(msg.as_str());
             }
 
             match result {
@@ -251,6 +252,7 @@ fn scan(
                     parent,
                 } => {
                     total_files += 1;
+                    total_size += size;
                     let path_integers: Vec<usize> = parent
                         .components()
                         .map(|c| {

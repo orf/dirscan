@@ -44,17 +44,23 @@ impl DirectoryStat {
         self.file_count += other.file_count;
         // This is nasty, but whatever
         if self.latest_created < other.latest_created
-            && !BLACKLISTED_DATES.iter().any(|d| other.latest_created.date() == *d)
+            && !BLACKLISTED_DATES
+                .iter()
+                .any(|d| other.latest_created.date() == *d)
         {
             self.latest_created = other.latest_created;
         }
         if self.latest_accessed < other.latest_accessed
-            && !BLACKLISTED_DATES.iter().any(|d| other.latest_accessed.date() == *d)
+            && !BLACKLISTED_DATES
+                .iter()
+                .any(|d| other.latest_accessed.date() == *d)
         {
             self.latest_accessed = other.latest_accessed;
         }
         if self.latest_modified < other.latest_modified
-            && !BLACKLISTED_DATES.iter().any(|d| other.latest_modified.date() == *d)
+            && !BLACKLISTED_DATES
+                .iter()
+                .any(|d| other.latest_modified.date() == *d)
         {
             self.latest_modified = other.latest_modified;
         }
@@ -62,38 +68,29 @@ impl DirectoryStat {
 
     // Please oh god tell me this can be generalized somehow.
     pub fn update_last_created(&mut self, created_option: Option<SystemTime>) {
-        match created_option {
-            Some(created) => {
-                let created_dt = created.into();
-                if self.latest_created < created_dt {
-                    self.latest_created = created_dt;
-                }
+        if let Some(created) = created_option {
+            let created_dt = created.into();
+            if self.latest_created < created_dt {
+                self.latest_created = created_dt;
             }
-            _ => {}
         }
     }
 
     pub fn update_last_access(&mut self, accessed_option: Option<SystemTime>) {
-        match accessed_option {
-            Some(accessed) => {
-                let accessed_dt = accessed.into();
-                if self.latest_accessed < accessed_dt {
-                    self.latest_accessed = accessed_dt;
-                }
+        if let Some(accessed) = accessed_option {
+            let accessed_dt = accessed.into();
+            if self.latest_accessed < accessed_dt {
+                self.latest_accessed = accessed_dt;
             }
-            _ => {}
         }
     }
 
     pub fn update_last_modified(&mut self, modified_option: Option<SystemTime>) {
-        match modified_option {
-            Some(modified) => {
-                let modified_dt = modified.into();
-                if self.latest_modified < modified_dt {
-                    self.latest_modified = modified_dt;
-                }
+        if let Some(modified) = modified_option {
+            let modified_dt = modified.into();
+            if self.latest_modified < modified_dt {
+                self.latest_modified = modified_dt;
             }
-            _ => {}
         }
     }
 }
