@@ -4,8 +4,8 @@ Dirscan is a high-performance tool for quickly inspecting the contents of large 
 single directory on a given disk, complete with the number of files within, their total size, and the latest time a 
 file was created, accessed or modified. 
 
-It is significantly faster than tools like `ncdu`, and produces a simple JSON or CSV output that can be analysed by the 
-built-in viewer or loaded into other tools.
+It is significantly faster than tools like `ncdu`, `find` or `tree`, produces a simple JSON or CSV output that can be analysed by the 
+built-in viewer or loaded into other tools and supports a customizable number of threads.
  
 
 Table of Contents
