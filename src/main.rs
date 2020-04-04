@@ -4,7 +4,7 @@ use crossbeam_channel::unbounded;
 use ignore::{Error, WalkBuilder, WalkState};
 use indexmap::IndexSet;
 use indicatif::{HumanBytes, ProgressBar, ProgressStyle};
-use prettytable::{cell, row, Cell, Row, Table};
+use prettytable::{cell, row, Table};
 use serde_json::Deserializer;
 use std::collections::HashMap;
 use std::ffi::OsString;
@@ -18,14 +18,6 @@ mod directory_stat;
 #[derive(StructOpt)]
 #[structopt(name = "dirscan", about = "Scan directories.")]
 struct Args {
-    #[structopt(
-    short = "f",
-    long = "format",
-    default_value = "json",
-    parse(try_from_str = parse_output)
-    )]
-    format: Format,
-
     #[structopt(subcommand)]
     cmd: Command,
 }
@@ -43,6 +35,14 @@ enum Command {
         output: Option<PathBuf>,
         #[structopt(parse(from_os_str))]
         input: PathBuf,
+
+            #[structopt(
+    short = "f",
+    long = "format",
+    default_value = "json",
+    parse(try_from_str = parse_output)
+    )]
+    format: Format,
     },
     Parse {
         #[structopt(short = "d", long = "depth", default_value = "3")]
@@ -52,6 +52,14 @@ enum Command {
         prefix: String,
         #[structopt(parse(from_os_str))]
         input: PathBuf,
+
+            #[structopt(
+    short = "f",
+    long = "format",
+    default_value = "json",
+    parse(try_from_str = parse_output)
+    )]
+    format: Format,
     },
 }
 
@@ -76,13 +84,13 @@ fn main() -> Result<(), Error> {
             threads,
             ignore_hidden,
             output,
-            input,
-        } => scan(input, output, args.format, ignore_hidden, threads),
+            input, format,
+        } => scan(input, output, format, ignore_hidden, threads),
         Command::Parse {
             depth,
             prefix,
-            input,
-        } => read(input, args.format, depth, prefix),
+            input, format,
+        } => read(input, format, depth, prefix),
     }
 }
 
