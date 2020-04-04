@@ -47,7 +47,7 @@ enum Command {
         format: Format,
     },
     Parse {
-        #[structopt(short = "d", long = "depth", default_value = "3")]
+        #[structopt(short = "d", long = "depth", default_value = "1")]
         depth: usize,
 
         #[structopt(short = "p", long = "prefix", default_value = "")]
@@ -153,7 +153,7 @@ fn read(input: PathBuf, format: Format, depth: usize, prefix: String) -> Result<
             stats
                 .entry(path)
                 .and_modify(|p| p.merge(&stat))
-                .or_insert(stat.clone());
+                .or_insert_with(||stat.clone());
         }
     }
 
@@ -192,7 +192,7 @@ fn scan(
     threads: Option<usize>,
 ) -> Result<(), Error> {
     let path = input.as_path();
-    let threads = threads.unwrap_or_else(num_cpus::get);
+    let threads = threads.unwrap_or_else(||num_cpus::get() * 2) ;
 
     if !path.is_dir() {
         eprintln!(
