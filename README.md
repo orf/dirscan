@@ -75,3 +75,19 @@ $ dirscan parse output.json --prefix=/System/
 ```
 
 You can include more directories with the `--depth` flag, or change the prefix search with `--prefix`.
+
+You can also order the results by `name` (the default), `size` or `files`:
+
+```
+$ dirscan parse output.json --prefix=/System/ --sort=size
+[00:00:02] Total: 580000 | Per sec: 220653/s
++----------------------+---------+----------+-------------+-------------+-------------+
+| Prefix               | Files   | Size     | created     | accessed    | modified    |
++----------------------+---------+----------+-------------+-------------+-------------+
+| /System/Volumes      | 1468296 | 197.93GB | 2 hours ago | 2 hours ago | 2 hours ago |
+| /System/Library      | 292190  | 13.56GB  | 7 hours ago | 2 hours ago | 7 hours ago |
+| /System/Applications | 57304   | 777.28MB | 2 weeks ago | 2 weeks ago | 2 weeks ago |
+| /System/iOSSupport   | 13856   | 600.20MB | 2 weeks ago | 2 weeks ago | 2 weeks ago |
+| /System/DriverKit    | 55      | 5.09MB   | 2 weeks ago | 2 weeks ago | 2 weeks ago |
++----------------------+---------+----------+-------------+-------------+-------------+
+```

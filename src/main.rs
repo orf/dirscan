@@ -42,7 +42,7 @@ enum Command {
         short = "f",
         long = "format",
         default_value = "json",
-        parse(try_from_str = parse_output)
+        parse(try_from_str = parse_format)
         )]
         format: Format,
     },
@@ -59,9 +59,17 @@ enum Command {
         short = "f",
         long = "format",
         default_value = "json",
-        parse(try_from_str = parse_output)
+        parse(try_from_str = parse_format)
         )]
         format: Format,
+
+        #[structopt(
+        short = "s",
+        long = "sort",
+        default_value = "name",
+        parse(try_from_str = parse_sort_type)
+        )]
+        sort: SortType,
     },
 }
 
@@ -71,11 +79,26 @@ enum Format {
     CSV,
 }
 
-fn parse_output(src: &str) -> Result<Format, String> {
+fn parse_format(src: &str) -> Result<Format, String> {
     match src.to_lowercase().as_str() {
         "json" => Ok(Format::JSON),
         "csv" => Ok(Format::CSV),
         _ => Err(format!("Invalid format: {}", src)),
+    }
+}
+
+enum SortType {
+    Name,
+    Files,
+    Size,
+}
+
+fn parse_sort_type(src: &str) -> Result<SortType, String> {
+    match src.to_lowercase().as_str() {
+        "name" => Ok(SortType::Name),
+        "files" => Ok(SortType::Files),
+        "size" => Ok(SortType::Size),
+        _ => Err(format!("Invalid sort type: {}", src)),
     }
 }
 
@@ -94,11 +117,18 @@ fn main() -> Result<(), Error> {
             prefix,
             input,
             format,
-        } => read(input, format, depth, prefix),
+            sort,
+        } => read(input, format, depth, prefix, sort),
     }
 }
 
-fn read(input: PathBuf, format: Format, depth: usize, prefix: String) -> Result<(), Error> {
+fn read(
+    input: PathBuf,
+    format: Format,
+    depth: usize,
+    prefix: String,
+    sort_type: SortType,
+) -> Result<(), Error> {
     let file = File::open(input)?;
     let reader = io::BufReader::new(file);
 
@@ -167,7 +197,11 @@ fn read(input: PathBuf, format: Format, depth: usize, prefix: String) -> Result<
     let formatter = timeago::Formatter::new();
 
     let mut stats_vec: Vec<_> = stats.into_iter().collect();
-    stats_vec.sort_by_key(|(buf, _stat)| buf.to_path_buf());
+    match sort_type {
+        SortType::Name => stats_vec.sort_by_key(|(buf, _stat)| buf.to_path_buf()),
+        SortType::Size => stats_vec.sort_by_key(|(_buf, stat)| std::cmp::Reverse(stat.total_size)),
+        SortType::Files => stats_vec.sort_by_key(|(_buf, stat)| std::cmp::Reverse(stat.file_count)),
+    };
 
     for (key, value) in stats_vec {
         table.add_row(row![
