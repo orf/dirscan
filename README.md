@@ -51,6 +51,11 @@ drastically improve performance:
 You can also output the results in CSV:
 
 `dirscan scan [PATH] --output=[OUTPUT] --format=csv`
+
+```
+$ dirscan scan ~/ --output=output.json
+[00:00:25] Files/s: 10324/s | Total: 258734 | Directories: 34842 | Size: 99.01GB | Components: 14291 | Errors: IO=0 Other=36
+```
  
 ## Inspect results
 
