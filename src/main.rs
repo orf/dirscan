@@ -10,9 +10,10 @@ use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
 use structopt::StructOpt;
+
 mod directory_stat;
 
 #[derive(StructOpt)]
@@ -37,28 +38,28 @@ enum Command {
         input: PathBuf,
 
         #[structopt(
-    short = "f",
-    long = "format",
-    default_value = "json",
-    parse(try_from_str = parse_output)
-    )]
+        short = "f",
+        long = "format",
+        default_value = "json",
+        parse(try_from_str = parse_output)
+        )]
         format: Format,
     },
     Parse {
         #[structopt(short = "d", long = "depth", default_value = "3")]
         depth: usize,
 
-        #[structopt()]
+        #[structopt(short = "p", long = "prefix", default_value = "/")]
         prefix: String,
         #[structopt(parse(from_os_str))]
         input: PathBuf,
 
         #[structopt(
-    short = "f",
-    long = "format",
-    default_value = "json",
-    parse(try_from_str = parse_output)
-    )]
+        short = "f",
+        long = "format",
+        default_value = "json",
+        parse(try_from_str = parse_output)
+        )]
         format: Format,
     },
 }
