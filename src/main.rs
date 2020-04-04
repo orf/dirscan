@@ -232,7 +232,7 @@ fn scan(
                 let total_directories = path_stat.len();
                 let percentage_components =
                     ((total_components as f64 / total_directories as f64) * 100 as f64) as i32;
-                let percentage_display = if percentage_components < 50 {
+                let percentage_display = if percentage_components < 30 {
                     green_style.apply_to(percentage_components)
                 } else {
                     red_style.apply_to(percentage_components)
