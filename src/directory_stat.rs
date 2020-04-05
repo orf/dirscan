@@ -1,96 +1,83 @@
-use chrono::prelude::*;
-use lazy_static::lazy_static;
+use crate::walker::MetadataWithSize;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::time::SystemTime;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct DirectoryStat {
-    pub file_count: u64,
     pub total_size: u64,
-    pub path: Option<PathBuf>,
+    pub file_count: u64,
+    pub path: PathBuf,
 
-    pub latest_created: DateTime<Utc>,
-    pub latest_accessed: DateTime<Utc>,
-    pub latest_modified: DateTime<Utc>,
-}
-
-// Sometimes there are weird dates, like 2098,1,1. Just filter them out here.
-// There is most likely a better way, but for now it works.
-lazy_static! {
-    static ref BLACKLISTED_DATES: [Date<Utc>; 1] = { [Utc.ymd(2098, 1, 1)] };
+    pub latest_created: Option<DateTime<Utc>>,
+    pub latest_accessed: Option<DateTime<Utc>>,
+    pub latest_modified: Option<DateTime<Utc>>,
 }
 
 impl DirectoryStat {
-    pub fn new(
-        total_size: u64,
-        created: Option<SystemTime>,
-        accessed: Option<SystemTime>,
-        modified: Option<SystemTime>,
-    ) -> DirectoryStat {
+    pub fn from_metadata(path: PathBuf, metadata: &MetadataWithSize) -> DirectoryStat {
+        let file_count = if metadata.is_dir { 0 } else { 1 };
+        let total_size = metadata.size;
+
         DirectoryStat {
-            file_count: 1,
-            latest_created: created.unwrap_or(SystemTime::UNIX_EPOCH).into(),
-            latest_accessed: accessed.unwrap_or(SystemTime::UNIX_EPOCH).into(),
-            latest_modified: modified.unwrap_or(SystemTime::UNIX_EPOCH).into(),
             total_size,
-            path: None,
+            file_count,
+            path,
+
+            latest_created: metadata.metadata.created().map(|f| f.into()).ok(),
+            latest_accessed: metadata.metadata.accessed().map(|f| f.into()).ok(),
+            latest_modified: metadata.metadata.modified().map(|f| f.into()).ok(),
         }
     }
 
-    /// Merge another DirectoryStat into this one
     pub fn merge(&mut self, other: &DirectoryStat) {
         self.total_size += other.total_size;
         self.file_count += other.file_count;
-        // This is nasty, but whatever
-        if self.latest_created < other.latest_created
-            && !BLACKLISTED_DATES
-                .iter()
-                .any(|d| other.latest_created.date() == *d)
-        {
-            self.latest_created = other.latest_created;
+        if let Some(created) = other.latest_created {
+            self.update_latest_created(created);
         }
-        if self.latest_accessed < other.latest_accessed
-            && !BLACKLISTED_DATES
-                .iter()
-                .any(|d| other.latest_accessed.date() == *d)
-        {
-            self.latest_accessed = other.latest_accessed;
+        if let Some(accessed) = other.latest_accessed {
+            self.update_latest_accessed(accessed);
         }
-        if self.latest_modified < other.latest_modified
-            && !BLACKLISTED_DATES
-                .iter()
-                .any(|d| other.latest_modified.date() == *d)
-        {
-            self.latest_modified = other.latest_modified;
+        if let Some(modified) = other.latest_modified {
+            self.update_latest_modified(modified);
         }
     }
 
     // Please oh god tell me this can be generalized somehow.
-    pub fn update_last_created(&mut self, created_option: Option<SystemTime>) {
-        if let Some(created) = created_option {
-            let created_dt = created.into();
-            if self.latest_created < created_dt {
-                self.latest_created = created_dt;
+    pub fn update_latest_created(&mut self, created: DateTime<Utc>) {
+        match self.latest_created {
+            None => {
+                self.latest_created.replace(created);
             }
+            Some(dt) if dt < created => {
+                self.latest_created.replace(created);
+            }
+            _ => {}
         }
     }
 
-    pub fn update_last_access(&mut self, accessed_option: Option<SystemTime>) {
-        if let Some(accessed) = accessed_option {
-            let accessed_dt = accessed.into();
-            if self.latest_accessed < accessed_dt {
-                self.latest_accessed = accessed_dt;
+    pub fn update_latest_accessed(&mut self, accessed: DateTime<Utc>) {
+        match self.latest_accessed {
+            None => {
+                self.latest_accessed.replace(accessed);
             }
+            Some(dt) if dt < accessed => {
+                self.latest_accessed.replace(accessed);
+            }
+            _ => {}
         }
     }
 
-    pub fn update_last_modified(&mut self, modified_option: Option<SystemTime>) {
-        if let Some(modified) = modified_option {
-            let modified_dt = modified.into();
-            if self.latest_modified < modified_dt {
-                self.latest_modified = modified_dt;
+    pub fn update_latest_modified(&mut self, modified: DateTime<Utc>) {
+        match self.latest_modified {
+            None => {
+                self.latest_modified.replace(modified);
             }
+            Some(dt) if dt < modified => {
+                self.latest_modified.replace(modified);
+            }
+            _ => {}
         }
     }
 }
