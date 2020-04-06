@@ -24,6 +24,7 @@ mod state;
 mod walker;
 
 fn main() {
+    reset_signal_pipe_handler();
     let args: Args = Args::from_args();
     match args.cmd {
         Command::Scan {
@@ -162,4 +163,18 @@ fn get_output_file(path: Option<PathBuf>) -> Box<dyn io::Write> {
             File::create(buf).expect("Error opening the output file"),
         )),
     }
+}
+
+pub fn reset_signal_pipe_handler() -> Result<()> {
+    #[cfg(target_family = "unix")]
+    {
+        use nix::sys::signal;
+
+        unsafe {
+            signal::signal(signal::Signal::SIGPIPE, signal::SigHandler::SigDfl)
+                .map_err(|e| Error::Other(e.to_string()))?;
+        }
+    }
+
+    Ok(())
 }
