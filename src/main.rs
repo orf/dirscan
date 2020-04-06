@@ -45,7 +45,8 @@ fn main() {
         Command::Parse {
             depth,
             prefix,
-            limit, input,
+            limit,
+            input,
             format,
             sort,
         } => read(depth, prefix, input, format, sort, limit),
@@ -89,7 +90,14 @@ pub fn walk(
     eprintln!("{}", walk_progress);
 }
 
-fn read(depth: usize, prefix: String, input: PathBuf, format: Format, sort_type: SortType, limit: Option<usize>) {
+fn read(
+    depth: usize,
+    prefix: String,
+    input: PathBuf,
+    format: Format,
+    sort_type: SortType,
+    limit: Option<usize>,
+) {
     let file = File::open(input).expect("Error opening input file");
     let prefix = PathBuf::from(prefix);
 
