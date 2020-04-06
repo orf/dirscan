@@ -12,7 +12,7 @@ use chrono_humanize::Humanize;
 use indicatif::HumanBytes;
 use prettytable::{cell, row, Table};
 use std::collections::HashMap;
-use std::io::BufWriter;
+use std::io::{BufWriter, ErrorKind};
 use std::path::PathBuf;
 use structopt::StructOpt;
 
@@ -24,6 +24,7 @@ mod state;
 mod walker;
 
 fn main() {
+    reset_signal_pipe_handler().expect("Error resetting signal pipe handler");
     let args: Args = Args::from_args();
     match args.cmd {
         Command::Scan {
@@ -44,10 +45,11 @@ fn main() {
         Command::Parse {
             depth,
             prefix,
+            limit,
             input,
             format,
             sort,
-        } => read(depth, prefix, input, format, sort),
+        } => read(depth, prefix, input, format, sort, limit),
     }
 }
 
@@ -88,7 +90,14 @@ pub fn walk(
     eprintln!("{}", walk_progress);
 }
 
-fn read(depth: usize, prefix: String, input: PathBuf, format: Format, sort_type: SortType) {
+fn read(
+    depth: usize,
+    prefix: String,
+    input: PathBuf,
+    format: Format,
+    sort_type: SortType,
+    limit: Option<usize>,
+) {
     let file = File::open(input).expect("Error opening input file");
     let prefix = PathBuf::from(prefix);
 
@@ -125,11 +134,16 @@ fn read(depth: usize, prefix: String, input: PathBuf, format: Format, sort_type:
 
     let now = chrono::Utc::now();
     let mut stats_vec: Vec<_> = stats.into_iter().collect();
+
     match sort_type {
         SortType::Name => stats_vec.sort_by_key(|(buf, _stat)| buf.to_path_buf()),
         SortType::Size => stats_vec.sort_by_key(|(_buf, stat)| std::cmp::Reverse(stat.total_size)),
         SortType::Files => stats_vec.sort_by_key(|(_buf, stat)| std::cmp::Reverse(stat.file_count)),
     };
+
+    if let Some(limit) = limit {
+        stats_vec.truncate(limit)
+    }
 
     for (key, value) in stats_vec {
         let latest_created = value
@@ -162,4 +176,18 @@ fn get_output_file(path: Option<PathBuf>) -> Box<dyn io::Write> {
             File::create(buf).expect("Error opening the output file"),
         )),
     }
+}
+
+pub fn reset_signal_pipe_handler() -> io::Result<()> {
+    #[cfg(target_family = "unix")]
+    {
+        use nix::sys::signal;
+
+        unsafe {
+            signal::signal(signal::Signal::SIGPIPE, signal::SigHandler::SigDfl)
+                .map_err(|e| io::Error::new(ErrorKind::Other, e))?;
+        }
+    }
+
+    Ok(())
 }
