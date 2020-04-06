@@ -46,6 +46,9 @@ pub enum Command {
         #[structopt(short = "p", long = "prefix", default_value = "")]
         prefix: String,
 
+        #[structopt(short = "l", long = "limit")]
+        limit: Option<usize>,
+
         #[structopt(parse(from_os_str))]
         input: PathBuf,
 
