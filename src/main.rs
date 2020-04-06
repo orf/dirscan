@@ -12,7 +12,7 @@ use chrono_humanize::Humanize;
 use indicatif::HumanBytes;
 use prettytable::{cell, row, Table};
 use std::collections::HashMap;
-use std::io::BufWriter;
+use std::io::{BufWriter, ErrorKind};
 use std::path::PathBuf;
 use structopt::StructOpt;
 
@@ -24,7 +24,7 @@ mod state;
 mod walker;
 
 fn main() {
-    reset_signal_pipe_handler();
+    reset_signal_pipe_handler().expect("Error resetting signal pipe handler");
     let args: Args = Args::from_args();
     match args.cmd {
         Command::Scan {
@@ -165,14 +165,14 @@ fn get_output_file(path: Option<PathBuf>) -> Box<dyn io::Write> {
     }
 }
 
-pub fn reset_signal_pipe_handler() -> Result<()> {
+pub fn reset_signal_pipe_handler() -> io::Result<()> {
     #[cfg(target_family = "unix")]
     {
         use nix::sys::signal;
 
         unsafe {
             signal::signal(signal::Signal::SIGPIPE, signal::SigHandler::SigDfl)
-                .map_err(|e| Error::Other(e.to_string()))?;
+                .map_err(|e| io::Error::new(ErrorKind::Other, e))?;
         }
     }
 
