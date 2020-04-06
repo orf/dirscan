@@ -8,10 +8,11 @@ latest time a file was created, accessed or modified.
 
 It's designed for disks that are too large to inspect with traditional tools, and it:
 
-* Is significantly faster than tools like `ncdu`, `find` or `tree`
-* Implements a memory-saving dictionary of common path segments to drastically reduce memory usage 
+* Is many orders of magnitudes faster than tools like `du`, `find` or `tree`
+* Can max out any disk you give it, assuming you have enough CPU resources to keep up.
 * Produces a simple JSON or CSV output that can be analysed by the built in viewer or other tools
 * Supports a customisable number of threads
+* Streams results to the output file, keeping relatively constant memory usage with any sized disk.
  
 
 Table of Contents

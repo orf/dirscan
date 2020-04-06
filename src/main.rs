@@ -1,175 +1,105 @@
-use crate::directory_stat::DirectoryStat;
-use console::Style;
-use crossbeam_channel::unbounded;
-use ignore::{Error, WalkBuilder, WalkState};
-use indexmap::IndexSet;
-use indicatif::{HumanBytes, ProgressBar, ProgressStyle};
-use prettytable::format::consts;
-use prettytable::{cell, row, Table};
-use serde_json::Deserializer;
-use std::collections::HashMap;
-use std::ffi::OsString;
+use crate::args::{Args, Command, SortType};
+use crate::formats::Format;
+use crate::progress::WalkProgress;
+use crate::state::WalkState;
+use crate::walker::Walker;
+
 use std::fs::File;
 use std::io;
+
+use crate::directory_stat::DirectoryStat;
+use chrono_humanize::Humanize;
+use indicatif::HumanBytes;
+use prettytable::{cell, row, Table};
+use std::collections::HashMap;
+use std::io::BufWriter;
 use std::path::PathBuf;
-use std::time::{Duration, Instant, SystemTime};
 use structopt::StructOpt;
 
+mod args;
 mod directory_stat;
+mod formats;
+mod progress;
+mod state;
+mod walker;
 
-#[derive(StructOpt)]
-#[structopt(name = "dirscan", about = "Scan directories.")]
-struct Args {
-    #[structopt(subcommand)]
-    cmd: Command,
-}
-
-#[derive(StructOpt)]
-enum Command {
-    Scan {
-        #[structopt(short = "t", long = "threads")]
-        threads: Option<usize>,
-
-        #[structopt(short = "i", long = "ignore-hidden", help = "Ignore hidden files")]
-        ignore_hidden: bool,
-
-        #[structopt(short = "o", long = "output", parse(from_os_str))]
-        output: Option<PathBuf>,
-        #[structopt(parse(from_os_str))]
-        path: PathBuf,
-
-        #[structopt(
-        short = "f",
-        long = "format",
-        default_value = "json",
-        parse(try_from_str = parse_format)
-        )]
-        format: Format,
-    },
-    Parse {
-        #[structopt(short = "d", long = "depth", default_value = "1")]
-        depth: usize,
-
-        #[structopt(short = "p", long = "prefix", default_value = "")]
-        prefix: String,
-        #[structopt(parse(from_os_str))]
-        input: PathBuf,
-
-        #[structopt(
-        short = "f",
-        long = "format",
-        default_value = "json",
-        parse(try_from_str = parse_format)
-        )]
-        format: Format,
-
-        #[structopt(
-        short = "s",
-        long = "sort",
-        default_value = "name",
-        parse(try_from_str = parse_sort_type)
-        )]
-        sort: SortType,
-    },
-}
-
-#[derive(Debug)]
-enum Format {
-    JSON,
-    CSV,
-}
-
-fn parse_format(src: &str) -> Result<Format, String> {
-    match src.to_lowercase().as_str() {
-        "json" => Ok(Format::JSON),
-        "csv" => Ok(Format::CSV),
-        _ => Err(format!("Invalid format: {}", src)),
-    }
-}
-
-enum SortType {
-    Name,
-    Files,
-    Size,
-}
-
-fn parse_sort_type(src: &str) -> Result<SortType, String> {
-    match src.to_lowercase().as_str() {
-        "name" => Ok(SortType::Name),
-        "files" => Ok(SortType::Files),
-        "size" => Ok(SortType::Size),
-        _ => Err(format!("Invalid sort type: {}", src)),
-    }
-}
-
-fn main() -> Result<(), Error> {
+fn main() {
     let args: Args = Args::from_args();
     match args.cmd {
         Command::Scan {
             threads,
             ignore_hidden,
+            actual_size,
             output,
-            path: input,
+            path,
             format,
-        } => scan(input, output, format, ignore_hidden, threads),
+        } => walk(
+            path,
+            ignore_hidden,
+            threads.unwrap_or(num_cpus::get() * 2),
+            actual_size,
+            format,
+            output,
+        ),
         Command::Parse {
             depth,
             prefix,
             input,
             format,
             sort,
-        } => read(input, format, depth, prefix, sort),
+        } => read(depth, prefix, input, format, sort),
     }
 }
 
-fn read(
-    input: PathBuf,
+pub fn walk(
+    root: PathBuf,
+    ignore_hidden: bool,
+    threads: usize,
+    actual_size: bool,
     format: Format,
-    depth: usize,
-    prefix: String,
-    sort_type: SortType,
-) -> Result<(), Error> {
-    let file = File::open(input)?;
-    let reader = io::BufReader::new(file);
+    output: Option<PathBuf>,
+) {
+    let writer = format.get_writer(get_output_file(output));
 
-    let stats: Box<dyn Iterator<Item = DirectoryStat>> = match format {
-        Format::JSON => Box::new(
-            Deserializer::from_reader(reader)
-                .into_iter::<DirectoryStat>()
-                .map(|f| f.unwrap()),
-        ),
-        Format::CSV => Box::new(
-            csv::Reader::from_reader(reader)
-                .into_deserialize::<DirectoryStat>()
-                .map(|f| f.unwrap()),
-        ),
-    };
+    let walker = Walker::new(threads, actual_size, ignore_hidden);
 
-    let pbar = ProgressBar::new_spinner();
-    pbar.enable_steady_tick(Duration::from_secs(1).as_millis() as u64);
-    pbar.set_draw_delta(10_000);
-    pbar.set_style(
-        ProgressStyle::default_spinner().template(
-            "[{elapsed_precise}] Total: {pos:.cyan/blue} | Per sec: {per_sec:.cyan/blue} ",
-        ),
-    );
+    let mut walk_state = WalkState::new(writer);
+    let mut walk_progress = WalkProgress::new();
+    let progress_bar = walk_progress.create_progress_bar();
 
-    let filtered_stats = pbar.wrap_iter(stats).filter(|r| {
-        let path = r.path.as_ref().unwrap();
-        path.starts_with(&prefix)
-    });
+    for dir in &mut walker.walk_dir(&root) {
+        walk_progress.record_progress(&dir);
+        if walk_progress.should_update() {
+            walk_progress.update(&progress_bar);
+        }
 
+        let dir_entry = dir.unwrap();
+
+        if let Some(metadata) = &dir_entry.client_state {
+            if dir_entry.file_type.is_dir() {
+                walk_state.add_path(dir_entry.path(), metadata);
+            } else {
+                walk_state.add_path(dir_entry.parent_path.to_path_buf(), metadata);
+            };
+        }
+    }
+
+    progress_bar.finish_and_clear();
+    eprintln!("{}", walk_progress);
+}
+
+fn read(depth: usize, prefix: String, input: PathBuf, format: Format, sort_type: SortType) {
+    let file = File::open(input).expect("Error opening input file");
+    let prefix = PathBuf::from(prefix);
+
+    let items = format.parse_file(file);
+    let filtered_items = items.filter(|p| p.path.starts_with(&prefix));
     let mut stats: HashMap<PathBuf, DirectoryStat> = HashMap::new();
 
-    for mut stat in filtered_stats {
-        let unwrapped_path = stat.path.unwrap();
-        // This is a bit of a mess. We set it to None to avoid some borrow checker issues.
-        // This needs some refactoring!
-        stat.path = None;
-
-        let relative_path = unwrapped_path.strip_prefix(&prefix).unwrap();
+    for stat in filtered_items {
+        let unwrapped_path = &stat.path;
         // Only take the 'depth' number of components, thus truncating the path to a the depth
-        // let relative_path_with_depth: PathBuf = relative_path.components();
+        let relative_path = unwrapped_path.strip_prefix(&prefix).unwrap();
         let base_path = PathBuf::new();
         let relative_paths_with_depth =
             relative_path
@@ -188,14 +118,12 @@ fn read(
     }
 
     let mut table = Table::new();
-    table.set_format(*consts::FORMAT_NO_LINESEP_WITH_TITLE);
+    table.set_format(*prettytable::format::consts::FORMAT_CLEAN);
     table.set_titles(row![
         "Prefix", "Files", "Size", "created", "accessed", "modified"
     ]);
 
     let now = chrono::Utc::now();
-    let formatter = timeago::Formatter::new();
-
     let mut stats_vec: Vec<_> = stats.into_iter().collect();
     match sort_type {
         SortType::Name => stats_vec.sort_by_key(|(buf, _stat)| buf.to_path_buf()),
@@ -204,223 +132,34 @@ fn read(
     };
 
     for (key, value) in stats_vec {
+        let latest_created = value
+            .latest_created
+            .map_or_else(|| "Unknown".to_string(), |c| (c - now).humanize());
+        let latest_accessed = value
+            .latest_accessed
+            .map_or_else(|| "Unknown".to_string(), |c| (c - now).humanize());
+        let latest_modified = value
+            .latest_modified
+            .map_or_else(|| "Unknown".to_string(), |c| (c - now).humanize());
         table.add_row(row![
-            format!("{}{}", prefix, key.as_path().display()),
+            format!("{}", prefix.as_path().join(key.as_path()).display()),
             value.file_count,
             HumanBytes(value.total_size),
-            formatter.convert_chrono(value.latest_created, now),
-            formatter.convert_chrono(value.latest_accessed, now),
-            formatter.convert_chrono(value.latest_modified, now)
+            latest_created,
+            latest_accessed,
+            latest_modified,
         ]);
     }
 
     table.printstd();
-    Ok(())
 }
 
-fn scan(
-    input: PathBuf,
-    output: Option<PathBuf>,
-    output_format: Format,
-    ignore_hidden: bool,
-    threads: Option<usize>,
-) -> Result<(), Error> {
-    let path = input.as_path();
-    let threads = threads.unwrap_or_else(|| num_cpus::get() * 2);
-
-    if !path.is_dir() {
-        eprintln!(
-            "Error: {} is not a directory or does not exist.",
-            path.display()
-        );
-        std::process::exit(exitcode::USAGE)
-    }
-
-    let mut walker = WalkBuilder::new(path);
-    walker
-        .hidden(ignore_hidden)
-        .parents(false)
-        .ignore(false)
-        .git_ignore(false)
-        .git_global(false)
-        .git_exclude(false)
-        .follow_links(false);
-
-    let (tx, rx) = unbounded();
-
-    let handler = std::thread::spawn(move || {
-        let mut io_errors: u64 = 0;
-        let mut other_errors: u64 = 0;
-        let mut total_size: u64 = 0;
-
-        let mut path_components_set: IndexSet<OsString> = IndexSet::with_capacity(100);
-        let mut path_stat: HashMap<Vec<usize>, DirectoryStat> = HashMap::with_capacity(100);
-
-        let update_every = Duration::from_millis(250);
-        let mut last_update = Instant::now();
-
-        let red_style = Style::new().red();
-        let blue_style = Style::new().blue();
-        let green_style = Style::new().green();
-
-        let pbar = ProgressBar::new_spinner();
-        pbar.enable_steady_tick((update_every.as_millis() + 50) as u64);
-        pbar.set_draw_delta(100_000);
-        pbar.set_style(ProgressStyle::default_spinner().template(
-            "[{elapsed_precise}] Files/s: {per_sec:.cyan/blue} | Total: {pos:.green/green} | {msg}",
-        ));
-
-        for result in pbar.wrap_iter(rx.iter()) {
-            if last_update.elapsed() > update_every {
-                last_update = Instant::now();
-                let total_components = path_components_set.len();
-                let total_directories = path_stat.len();
-                let msg = format!(
-                    "Directories: {} | Size: {} | Components: {} | Errors: IO={} Other={}",
-                    green_style.apply_to(total_directories),
-                    green_style.apply_to(HumanBytes(total_size)),
-                    blue_style.apply_to(total_components),
-                    red_style.apply_to(io_errors),
-                    red_style.apply_to(other_errors),
-                );
-                pbar.set_message(msg.as_str());
-            }
-
-            match result {
-                WalkResult::IOError => io_errors += 1,
-                WalkResult::OtherError => other_errors += 1,
-                WalkResult::File {
-                    created,
-                    accessed,
-                    modified,
-                    size,
-                    parent,
-                } => {
-                    total_size += size;
-                    let path_integers: Vec<usize> = parent
-                        .components()
-                        .map(|c| {
-                            let component = c.as_os_str().to_os_string();
-                            let (idx, _) = path_components_set.insert_full(component);
-                            idx
-                        })
-                        .collect();
-                    path_stat
-                        .entry(path_integers)
-                        .and_modify(|s| {
-                            s.total_size += size;
-                            s.file_count += 1;
-                            s.update_last_access(accessed);
-                            s.update_last_created(created);
-                            s.update_last_modified(modified);
-                        })
-                        .or_insert_with(|| DirectoryStat::new(size, created, accessed, modified));
-                }
-            }
-        }
-
-        let stat_enumerator = path_stat.into_iter().map(|(key, mut dir_stat)| {
-            dir_stat.path = Some(
-                key.into_iter()
-                    .map(|i| path_components_set.get_index(i).unwrap())
-                    .collect(),
-            );
-            dir_stat
-        });
-
-        let mut output_file = get_writer(output);
-        match output_format {
-            Format::JSON => {
-                stat_enumerator.for_each(|s| {
-                    let res = &serde_json::to_vec(&s).expect("Error serializing to JSON");
-                    output_file
-                        .write_all(res)
-                        .expect("Error writing to output file");
-                    writeln!(output_file).expect("error writing newline");
-                });
-            }
-            Format::CSV => {
-                let mut wtr = csv::WriterBuilder::new()
-                    .has_headers(true)
-                    .from_writer(output_file);
-                stat_enumerator.for_each(|s| {
-                    wtr.serialize(s).expect("Error serializing to CSV");
-                })
-            }
-        }
-    });
-
-    walker.threads(threads).build_parallel().run(move || {
-        let tx_thread = tx.clone();
-        Box::new(move |entry| {
-            let dir_entry = match entry {
-                Err(Error::Io(_e)) => {
-                    tx_thread.send(WalkResult::IOError).unwrap();
-                    return WalkState::Continue;
-                }
-                Err(_e) => {
-                    tx_thread.send(WalkResult::OtherError).unwrap();
-                    return WalkState::Continue;
-                }
-                Ok(dir_entry) if dir_entry.depth() == 0 => {
-                    return WalkState::Continue;
-                }
-                Ok(dir_entry) => dir_entry,
-            };
-            if let Some(file_type) = dir_entry.file_type() {
-                if !file_type.is_file() {
-                    return WalkState::Continue;
-                }
-            }
-
-            let entry_path = dir_entry.path();
-            let parent_path = match entry_path.parent() {
-                Some(parent) => parent.to_path_buf(),
-                None => {
-                    tx_thread.send(WalkResult::OtherError).unwrap();
-                    return WalkState::Continue;
-                }
-            };
-            match dir_entry.metadata() {
-                Ok(metadata) => {
-                    tx_thread
-                        .send(WalkResult::File {
-                            created: metadata.created().ok(),
-                            accessed: metadata.accessed().ok(),
-                            modified: metadata.modified().ok(),
-                            size: metadata.len(),
-                            parent: parent_path,
-                        })
-                        .unwrap();
-                }
-                Err(_e) => {
-                    tx_thread.send(WalkResult::OtherError).unwrap();
-                }
-            }
-            WalkState::Continue
-        })
-    });
-
-    handler.join().expect("Error in thread");
-    Ok(())
-}
-
-#[derive(Debug)]
-enum WalkResult {
-    IOError,
-    OtherError,
-    File {
-        created: Option<SystemTime>,
-        accessed: Option<SystemTime>,
-        modified: Option<SystemTime>,
-        size: u64,
-        parent: PathBuf,
-    },
-}
-
-fn get_writer(path: Option<PathBuf>) -> Box<dyn io::Write> {
+fn get_output_file(path: Option<PathBuf>) -> Box<dyn io::Write> {
     match path {
         None => Box::new(io::stdout()),
-        Some(buf) => Box::new(File::create(buf).expect("Error opening the output file")),
+        Some(buf) => Box::new(BufWriter::with_capacity(
+            1024 * 1024,
+            File::create(buf).expect("Error opening the output file"),
+        )),
     }
 }
