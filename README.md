@@ -22,6 +22,7 @@ Table of Contents
       * [Homebrew (MacOS   Linux)](#homebrew-macos--linux)
       * [Binaries (Windows)](#binaries-windows)
       * [Cargo](#cargo)
+      * [Docker](#docker)
    * [Usage :saxophone:](#usage-saxophone)
       * [Scan a directory](#scan-a-directory)
       * [Inspect results](#inspect-results)
@@ -40,6 +41,12 @@ and move it to a directory on your `PATH`.
 ## Cargo
 
 For optimal performance run `cargo install dirscan`
+
+## Docker
+
+This project is packaged as a Docker container [as tomforbes/dirscan](https://hub.docker.com/r/tomforbes/dirscan).
+
+Running `docker run -vYOUR_DIRECTORY:/dir tomforbes/dirscan scan /dir` will scan `YOUR_DIRECTORY`.
 
 # Usage :saxophone:
 
