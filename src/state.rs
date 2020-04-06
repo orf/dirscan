@@ -53,13 +53,10 @@ impl WalkState {
 
 impl Drop for WalkState {
     fn drop(&mut self) {
-        match &self.current {
-            Some(stat) => {
-                self.writer
-                    .write_stat(stat)
-                    .expect("Error writing directory statistic");
-            }
-            _ => {}
+        if let Some(stat) = &self.current {
+            self.writer
+                .write_stat(stat)
+                .expect("Error writing directory statistic");
         }
     }
 }
