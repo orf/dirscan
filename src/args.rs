@@ -38,6 +38,17 @@ pub enum Command {
         )]
         format: Format,
     },
+    #[structopt(about = "Stream file paths to stdout from a given set of directories")]
+    Stream {
+        #[structopt(short = "t", long = "threads")]
+        threads: Option<usize>,
+
+        #[structopt(short = "i", long = "ignore-hidden", help = "Ignore hidden files")]
+        ignore_hidden: bool,
+
+        #[structopt(parse(from_os_str))]
+        path: PathBuf,
+    },
     #[structopt(about = "Parse results files")]
     Parse {
         #[structopt(short = "d", long = "depth", default_value = "1")]
