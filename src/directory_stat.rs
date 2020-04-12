@@ -7,6 +7,7 @@ use std::path::PathBuf;
 pub struct DirectoryStat {
     pub total_size: u64,
     pub file_count: u64,
+    pub largest_file_size: u64,
     pub path: PathBuf,
 
     pub latest_created: Option<DateTime<Utc>>,
@@ -22,6 +23,7 @@ impl DirectoryStat {
         DirectoryStat {
             total_size,
             file_count,
+            largest_file_size: total_size,
             path,
 
             latest_created: metadata.metadata.created().map(|f| f.into()).ok(),
@@ -33,6 +35,9 @@ impl DirectoryStat {
     pub fn merge(&mut self, other: &DirectoryStat) {
         self.total_size += other.total_size;
         self.file_count += other.file_count;
+        if other.largest_file_size > self.largest_file_size {
+            self.largest_file_size = other.largest_file_size;
+        }
         if let Some(created) = other.latest_created {
             self.update_latest_created(created);
         }

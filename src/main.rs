@@ -148,7 +148,13 @@ fn read(
     let mut table = Table::new();
     table.set_format(*prettytable::format::consts::FORMAT_CLEAN);
     table.set_titles(row![
-        "Prefix", "Files", "Size", "created", "accessed", "modified"
+        "Prefix",
+        "Files",
+        "Size",
+        "Largest File",
+        "Created",
+        "Accessed",
+        "Modified"
     ]);
 
     let now = chrono::Utc::now();
@@ -178,6 +184,7 @@ fn read(
             format!("{}", prefix.as_path().join(key.as_path()).display()),
             value.file_count,
             HumanBytes(value.total_size),
+            HumanBytes(value.largest_file_size),
             latest_created,
             latest_accessed,
             latest_modified,

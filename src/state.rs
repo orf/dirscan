@@ -29,6 +29,9 @@ impl WalkState {
                 if !metadata.is_dir {
                     stat.total_size += metadata.size;
                     stat.file_count += 1;
+                    if metadata.size > stat.largest_file_size {
+                        stat.largest_file_size = metadata.size
+                    }
                     if let Ok(created) = metadata.metadata.created() {
                         stat.update_latest_created(created.into());
                     }
