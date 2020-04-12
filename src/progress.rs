@@ -7,6 +7,7 @@ use prettytable::{cell, row, table};
 
 use serde::export::Formatter;
 
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 pub struct WalkProgress {
@@ -14,13 +15,14 @@ pub struct WalkProgress {
     total: u64,
     total_size: u64,
 
+    root: PathBuf,
     update_frequency: Duration,
     started: Instant,
     last_update: Instant,
 }
 
 impl WalkProgress {
-    pub fn new() -> WalkProgress {
+    pub fn new(root: PathBuf) -> WalkProgress {
         let update_frequency = Duration::from_millis(500);
         let started = Instant::now();
 
@@ -29,6 +31,7 @@ impl WalkProgress {
             total: 0,
             total_size: 0,
 
+            root,
             update_frequency,
             started,
             last_update: started,
@@ -84,14 +87,20 @@ impl std::fmt::Display for WalkProgress {
             chrono_humanize::Accuracy::Precise,
             chrono_humanize::Tense::Present,
         );
+        let errors = if self.errors > 0 {
+            style(self.errors).red()
+        } else {
+            style(self.errors).green()
+        };
         let mut table = table!(
+            ["Root", style(self.root.display()).blue()],
             [
                 "Total Size",
                 style(indicatif::HumanBytes(self.total_size)).green()
             ],
             ["Files", style(self.total).green()],
             ["Duration", style(runtime_text).green()],
-            ["Errors", style(self.errors).red()]
+            ["Errors", errors]
         );
         table.set_format(*prettytable::format::consts::FORMAT_CLEAN);
         write!(f, "{}", table.to_string())

@@ -71,7 +71,7 @@ pub fn walk(
     let walker = Walker::new(threads, actual_size, ignore_hidden, true, true);
 
     let mut walk_state = WalkState::new(writer);
-    let mut walk_progress = WalkProgress::new();
+    let mut walk_progress = WalkProgress::new(root.clone());
     let progress_bar = walk_progress.create_progress_bar();
 
     for dir in &mut walker.walk_dir(&root) {
