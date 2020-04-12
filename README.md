@@ -68,8 +68,20 @@ You can also output the results in CSV:
 
 ```
 $ dirscan scan ~/ --output=output.json --threads=20
-[00:00:15] Files/s: 17324/s | Total: 258734 | Directories: 34842 | Size: 99.01GB | Components: 14291 | Errors: IO=0 Other=36
+[00:00:15] Files/s: 17324/s | Total: 258734 | Size: 99.01GB | Components: 14291 | Errors: IO=0 Other=36
 ```
+
+## Stream results
+
+You can stream all files to stdout by executing:
+
+`dirscan stream [PATH]`
+
+If you wanted to remove all files in a disk in parallel, you could create a pipeline like:
+
+`dirscan stream /my-dir | xargs -d ‘\n’ -L10 -P500`
+
+This would launch up to 500 `rm` processes, each deleting 10 files.
  
 ## Inspect results
 
