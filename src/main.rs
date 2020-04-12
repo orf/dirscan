@@ -102,7 +102,7 @@ pub fn stream(root: PathBuf, ignore_hidden: bool, threads: usize) {
     for dir in &mut walker.walk_dir(&root) {
         let dir_entry = dir.unwrap();
         if !dir_entry.file_type.is_file() {
-            continue
+            continue;
         }
         let formatted_string = format!("{}\n", dir_entry.path().display());
         output_lock.write_all(&formatted_string.as_bytes()).unwrap();
