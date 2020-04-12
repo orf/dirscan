@@ -53,9 +53,8 @@ impl WalkProgress {
         progress_bar.set_position(self.total);
         progress_bar.set_message(
             format!(
-                "Files: {} | Directories: {} | Size: {} | Errors: {}",
+                "Files: {} | Size: {} | Errors: {}",
                 style(self.total).green(),
-                style(0).green(),
                 style(HumanBytes(self.total_size)).green(),
                 style(self.errors).red(),
             )

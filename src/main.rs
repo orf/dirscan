@@ -12,7 +12,7 @@ use chrono_humanize::Humanize;
 use indicatif::HumanBytes;
 use prettytable::{cell, row, Table};
 use std::collections::HashMap;
-use std::io::{BufWriter, ErrorKind};
+use std::io::{BufWriter, ErrorKind, Write};
 use std::path::PathBuf;
 use structopt::StructOpt;
 
@@ -42,6 +42,11 @@ fn main() {
             format,
             output,
         ),
+        Command::Stream {
+            threads,
+            ignore_hidden,
+            path,
+        } => stream(path, ignore_hidden, threads.unwrap_or(num_cpus::get() * 2)),
         Command::Parse {
             depth,
             prefix,
@@ -63,7 +68,7 @@ pub fn walk(
 ) {
     let writer = format.get_writer(get_output_file(output));
 
-    let walker = Walker::new(threads, actual_size, ignore_hidden);
+    let walker = Walker::new(threads, actual_size, ignore_hidden, true, true);
 
     let mut walk_state = WalkState::new(writer);
     let mut walk_progress = WalkProgress::new();
@@ -88,6 +93,20 @@ pub fn walk(
 
     progress_bar.finish_and_clear();
     eprintln!("{}", walk_progress);
+}
+
+pub fn stream(root: PathBuf, ignore_hidden: bool, threads: usize) {
+    let walker = Walker::new(threads, false, ignore_hidden, false, false);
+    let stdout = io::stdout();
+    let mut output_lock = stdout.lock();
+    for dir in &mut walker.walk_dir(&root) {
+        let dir_entry = dir.unwrap();
+        if !dir_entry.file_type.is_file() {
+            continue;
+        }
+        let formatted_string = format!("{}\n", dir_entry.path().display());
+        output_lock.write_all(&formatted_string.as_bytes()).unwrap();
+    }
 }
 
 fn read(
