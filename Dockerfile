@@ -6,4 +6,5 @@ RUN cargo build --release
 
 FROM debian:stretch-slim
 COPY --from=build /build/target/release/dirscan /bin/
+RUN apt-get update && apt-get install -y pv
 ENTRYPOINT ["dirscan"]
