@@ -41,7 +41,7 @@ impl Walker {
             .follow_links(false)
             .skip_hidden(self.ignore_hidden)
             .sort(true)
-            .process_read_dir(move |_, result| {
+            .process_read_dir(move |_, _, _, result| {
                 result.retain(|r| r.is_ok());
                 // Sort items by their file type - files come first, then directories after.
                 if sorted {

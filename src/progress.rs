@@ -4,11 +4,9 @@ use indicatif::{HumanBytes, ProgressBar, ProgressStyle};
 use jwalk::DirEntry;
 
 use prettytable::{cell, row, table};
-
-use serde::export::Formatter;
-
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
+use std::fmt;
 
 pub struct WalkProgress {
     errors: u64,
@@ -80,7 +78,7 @@ impl WalkProgress {
 }
 
 impl std::fmt::Display for WalkProgress {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
         let elapsed = chrono::Duration::from_std(self.started.elapsed()).unwrap();
         let runtime = chrono_humanize::HumanTime::from(elapsed);
         let runtime_text = runtime.to_text_en(
