@@ -4,9 +4,9 @@ use indicatif::{HumanBytes, ProgressBar, ProgressStyle};
 use jwalk::DirEntry;
 
 use prettytable::{cell, row, table};
+use std::fmt;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
-use std::fmt;
 
 pub struct WalkProgress {
     errors: u64,

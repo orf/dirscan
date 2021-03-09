@@ -8,13 +8,27 @@ use std::path::PathBuf;
 pub struct WalkState {
     current: Option<DirectoryStat>,
     writer: Box<dyn FormatWriter>,
+    depth: Option<usize>,
 }
 
 impl WalkState {
-    pub fn new(writer: Box<dyn FormatWriter>) -> WalkState {
+    pub fn new(writer: Box<dyn FormatWriter>, depth: Option<usize>) -> WalkState {
         WalkState {
             current: None,
             writer,
+            depth,
+        }
+    }
+
+    fn is_equivalent_path(root: &PathBuf, target: &PathBuf, depth: Option<usize>) -> bool {
+        // Are these two directory paths the same, or given a depth are the first N
+        // components the same?
+        match depth {
+            None => root == target,
+            Some(depth) => root
+                .components()
+                .take(depth)
+                .eq(target.components().take(depth)),
         }
     }
 
@@ -24,7 +38,7 @@ impl WalkState {
             None => {
                 self.current = Some(DirectoryStat::from_metadata(path, metadata));
             }
-            Some(stat) if stat.path == path => {
+            Some(stat) if WalkState::is_equivalent_path(&stat.path, &path, self.depth) => {
                 // Same directory, update in place
                 if !metadata.is_dir {
                     stat.total_size += metadata.size;

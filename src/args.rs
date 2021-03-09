@@ -37,6 +37,9 @@ pub enum Command {
         possible_values = &Format::VARIANTS
         )]
         format: Format,
+
+        #[structopt(short = "d", long = "depth", help = "Directory depth to scan")]
+        depth: Option<usize>,
     },
     #[structopt(about = "Stream file paths to stdout from a given set of directories")]
     Stream {

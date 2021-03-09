@@ -35,6 +35,7 @@ fn main() {
             output,
             path,
             format,
+            depth,
         } => walk(
             path,
             ignore_hidden,
@@ -42,6 +43,7 @@ fn main() {
             actual_size,
             format,
             output,
+            depth,
         ),
         Command::Stream {
             threads,
@@ -66,12 +68,13 @@ pub fn walk(
     actual_size: bool,
     format: Format,
     output: Option<PathBuf>,
+    depth: Option<usize>,
 ) {
     let writer = format.get_writer(get_output_file(output));
 
     let walker = Walker::new(threads, actual_size, ignore_hidden, true, true);
 
-    let mut walk_state = WalkState::new(writer);
+    let mut walk_state = WalkState::new(writer, depth);
     let mut walk_progress = WalkProgress::new(root.clone());
     let progress_bar = walk_progress.create_progress_bar();
 
