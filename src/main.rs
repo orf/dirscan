@@ -11,6 +11,7 @@ use crate::directory_stat::DirectoryStat;
 use chrono_humanize::Humanize;
 use indicatif::HumanBytes;
 use prettytable::{cell, row, Table};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{BufWriter, ErrorKind, Write};
 use std::path::PathBuf;
@@ -95,6 +96,13 @@ pub fn walk(
     eprintln!("{}", walk_progress);
 }
 
+// Temporary hack
+#[derive(Serialize, Deserialize, Clone)]
+pub struct FileStat {
+    pub path: PathBuf,
+    pub size: u64,
+}
+
 pub fn stream(root: PathBuf, ignore_hidden: bool, threads: usize) {
     let walker = Walker::new(threads, false, ignore_hidden, false, false);
     let stdout = io::stdout();
@@ -104,8 +112,15 @@ pub fn stream(root: PathBuf, ignore_hidden: bool, threads: usize) {
         if !dir_entry.file_type.is_file() {
             continue;
         }
-        let formatted_string = format!("{}\n", dir_entry.path().display());
-        output_lock.write_all(&formatted_string.as_bytes()).unwrap();
+        let size = match dir_entry.metadata() {
+            Err(_) => 0,
+            Ok(m) => m.len(),
+        };
+        let path = dir_entry.path();
+        let output =
+            serde_json::to_vec(&FileStat { path, size }).expect("Error serializing file stat");
+        output_lock.write_all(&output).unwrap();
+        output_lock.write(b"\n").unwrap();
     }
 }
 
