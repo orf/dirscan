@@ -49,7 +49,13 @@ fn main() {
             threads,
             ignore_hidden,
             path,
-        } => stream(path, ignore_hidden, threads.unwrap_or(num_cpus::get() * 2)),
+            no_size,
+        } => stream(
+            path,
+            ignore_hidden,
+            threads.unwrap_or(num_cpus::get() * 2),
+            no_size,
+        ),
         Command::Parse {
             depth,
             prefix,
@@ -106,8 +112,8 @@ pub struct FileStat {
     pub size: u64,
 }
 
-pub fn stream(root: PathBuf, ignore_hidden: bool, threads: usize) {
-    let walker = Walker::new(threads, false, ignore_hidden, false, false);
+pub fn stream(root: PathBuf, ignore_hidden: bool, threads: usize, no_size: bool) {
+    let walker = Walker::new(threads, false, ignore_hidden, !no_size, false);
     let stdout = io::stdout();
     let mut output_lock = stdout.lock();
     for dir in &mut walker.walk_dir(&root) {
@@ -115,16 +121,20 @@ pub fn stream(root: PathBuf, ignore_hidden: bool, threads: usize) {
         if !dir_entry.file_type.is_file() {
             continue;
         }
-        let size = match dir_entry.metadata() {
-            Err(_) => 0,
-            Ok(m) => m.len(),
-        };
         let path = dir_entry.path();
+
+        let size = match &dir_entry.client_state {
+            None => 0,
+            Some(state) => state.size,
+        };
+
         let output =
             serde_json::to_vec(&FileStat { path, size }).expect("Error serializing file stat");
         output_lock.write_all(&output).unwrap();
         output_lock.write(b"\n").unwrap();
     }
+
+    return;
 }
 
 fn read(
