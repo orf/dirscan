@@ -128,13 +128,10 @@ pub fn stream(root: PathBuf, ignore_hidden: bool, threads: usize, no_size: bool)
             Some(state) => state.size,
         };
 
-        let output =
-            serde_json::to_vec(&FileStat { path, size }).expect("Error serializing file stat");
-        output_lock.write_all(&output).unwrap();
+        serde_json::to_writer(&mut output_lock, &FileStat { path, size })
+            .expect("Error serializing file stat");
         output_lock.write(b"\n").unwrap();
     }
-
-    return;
 }
 
 fn read(
