@@ -52,8 +52,11 @@ pub enum Command {
         #[structopt(parse(from_os_str))]
         path: PathBuf,
 
-        #[structopt(short = "n", long = "no-size")]
+        #[structopt(short = "n", long = "no-size", help = "Don't output file sizes")]
         no_size: bool,
+
+        #[structopt(short = "p", long = "only-paths", help = "Only output file paths")]
+        only_paths: bool,
     },
     #[structopt(about = "Parse results files")]
     Parse {

@@ -50,11 +50,13 @@ fn main() {
             ignore_hidden,
             path,
             no_size,
+            only_paths,
         } => stream(
             path,
             ignore_hidden,
             threads.unwrap_or(num_cpus::get() * 2),
             no_size,
+            only_paths,
         ),
         Command::Parse {
             depth,
@@ -112,7 +114,16 @@ pub struct FileStat {
     pub size: u64,
 }
 
-pub fn stream(root: PathBuf, ignore_hidden: bool, threads: usize, no_size: bool) {
+pub fn stream(
+    root: PathBuf,
+    ignore_hidden: bool,
+    threads: usize,
+    mut no_size: bool,
+    only_paths: bool,
+) {
+    if only_paths {
+        no_size = true
+    }
     let walker = Walker::new(threads, false, ignore_hidden, !no_size, false);
     let stdout = io::stdout();
     let mut output_lock = stdout.lock();
@@ -121,6 +132,23 @@ pub fn stream(root: PathBuf, ignore_hidden: bool, threads: usize, no_size: bool)
         if !dir_entry.file_type.is_file() {
             continue;
         }
+
+        if only_paths {
+            // Write without extra allocations. Don't care about lossy files here...
+            write!(
+                &mut output_lock,
+                "{}",
+                format_args!(
+                    "{}{}{}\n",
+                    dir_entry.parent_path.display(),
+                    std::path::MAIN_SEPARATOR,
+                    dir_entry.file_name.to_string_lossy()
+                )
+            )
+            .expect("Error writing path");
+            continue;
+        }
+
         let path = dir_entry.path();
 
         let size = match &dir_entry.client_state {
