@@ -158,7 +158,7 @@ pub fn stream(
 
         serde_json::to_writer(&mut output_lock, &FileStat { path, size })
             .expect("Error serializing file stat");
-        output_lock.write(b"\n").unwrap();
+        output_lock.write_all(b"\n").unwrap();
     }
 }
 

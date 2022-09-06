@@ -101,6 +101,6 @@ impl std::fmt::Display for WalkProgress {
             ["Errors", errors]
         );
         table.set_format(*prettytable::format::consts::FORMAT_CLEAN);
-        write!(f, "{}", table.to_string())
+        write!(f, "{}", table)
     }
 }

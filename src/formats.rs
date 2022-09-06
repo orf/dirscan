@@ -1,4 +1,3 @@
-use csv;
 use std::fs::File;
 use std::io;
 
@@ -9,20 +8,20 @@ use strum_macros::{Display, EnumString, EnumVariantNames};
 #[derive(EnumString, EnumVariantNames, Display)]
 #[strum(serialize_all = "kebab_case")]
 pub enum Format {
-    JSON,
-    CSV,
+    Json,
+    Csv,
 }
 
 impl Format {
     pub fn parse_file(&self, file: File) -> Box<dyn Iterator<Item = DirectoryStat>> {
         let reader = io::BufReader::new(file);
         match self {
-            Self::JSON => Box::new(
+            Self::Json => Box::new(
                 serde_json::Deserializer::from_reader(reader)
                     .into_iter::<DirectoryStat>()
                     .map(|f| f.unwrap()),
             ),
-            Self::CSV => Box::new(
+            Self::Csv => Box::new(
                 csv::Reader::from_reader(reader)
                     .into_deserialize::<DirectoryStat>()
                     .map(|f| f.unwrap()),
@@ -32,8 +31,8 @@ impl Format {
 
     pub fn get_writer(&self, file: Box<dyn io::Write>) -> Box<dyn FormatWriter> {
         match self {
-            Self::JSON => Box::new(JsonWriter::new(file)),
-            Self::CSV => Box::new(CSVWriter::new(file)),
+            Self::Json => Box::new(JsonWriter::new(file)),
+            Self::Csv => Box::new(CSVWriter::new(file)),
         }
     }
 }
